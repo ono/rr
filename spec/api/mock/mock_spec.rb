@@ -190,4 +190,59 @@ describe "mock" do
     end
 
   end
+
+  # This spec tries to reproduce an issue on mocking with ActiveRecord's association.
+  # It gives a strange unexpected invocation error at a particlar situation.
+  describe "with a proxy class" do
+    # The ProxySample class immitates AssociationProxy class in activerecord.
+    class ProxySample
+      def initialize
+        @model = ModelSample.new
+      end
+
+      def method_missing(sym,*args,&block)
+        if @model.respond_to?(sym)
+          @model.send(sym, *args, &block)
+        else
+          super
+        end
+      end
+    end
+
+    # The ModelSample class immitates ActiveRecord::Base class in activerecord.
+    class ModelSample
+      def name
+        "Brian Takita"
+      end
+
+      def github_id
+        "btakita"
+      end
+    end
+
+    before do
+      @proxy = ProxySample.new
+      mock(@proxy).name.times(1) { "Mocked!" }
+    end
+
+    # This works on 1.2.0
+    it "mocks properly usually" do
+      @proxy.name.should == "Mocked!"
+    end
+
+    # This also works on 1.2.0
+    it "calls an original method if it is not mocked" do
+      @proxy.name.should == "Mocked!"
+      @proxy.github_id.should == "btakita"
+    end
+
+    # But this doesn't work on 1.2.0.
+    # It gives unexpected method invocation when non-mocking method is called
+    # second time.
+    it "calls an original method if it is not mocked for the second time too " do
+      @proxy.name.should == "Mocked!"
+      @proxy.github_id.should == "btakita"
+      @proxy.github_id.should == "btakita"
+    end
+  end
 end
